@@ -1,2 +1,0 @@
-check_description,code
-Main water source should not be the same as secondary water source,"""G0_End/W1_Water/w_mainsource"" == ""G0_End/W1_Water/w_secondsource"""
