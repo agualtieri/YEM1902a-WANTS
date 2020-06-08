@@ -1,7 +1,7 @@
 ### WASH WANTS Assessment Data Cleaning Script - Cholera Tool
 ### REACH Yemen
-### V3
-### 03/12/2019
+### V4
+### 02/06/2020
 
 rm(list=ls())
 
@@ -12,6 +12,8 @@ rm(list=ls())
 # devtools::install_github("mrdwab/koboloadeR", force = T, build_vignettes = T) 
 # devtools::install_github("mabafaba/hypegrammaR", ref = "develop", force = T, build_opts = c(), build_vignettes = T) 
 # devtools::install_github("agualtieri/koboAPI") 
+
+
 
 
 
@@ -32,11 +34,12 @@ current_date <- Sys.Date()
 #kobo_data_downloader("408888", "reach_yemen:KOBOyemREACH2017", api = "kobohr")
 
 ### Load choices and questionnaire
-choices <- read.csv("./data/kobo/choices.csv")
-questions<- read.csv("./data/kobo/questions.csv")
+choices <- read.csv("./data/choices.csv")
+questions<- read.csv("./data/questions.csv")
+
 
 ### Load data and rename variables
-data <- read.xlsx("./data/WANTS Cholera Key Informant Questionnaire VERSION 2_ADRA_171122019.xlsx")
+data <- read.xlsx("./data/WASH Cholera Key Informant Questionnaire_test.xlsx", sheet = "sheet 1")
 
 names(data)[names(data) == "_uuid"] <- "uuid"
 names(data)[names(data) == "_index"] <- "index"
@@ -188,25 +191,103 @@ soap_log <- data.frame(uuid = as.character(),
   print("No issues realted to access to soap. The dataset seems clean.")}
 
 ### Check times
-time_stamp <- data %>% select("uuid", "start", "end")
+source("./R/check_time.R")
+time_stamp <- select(data, "uuid", "start", "end", "g_enum_agency", "g_sub_district")
+check_time <- check_time(time_stamp, 5, 40)
 
-time_check <- cleaninginspectoR::check_time(time_stamp, 10, 40)
-names(time_check)[names(time_check) == "index"] <- "uuid"
 
-time_check <- time_check %>% mutate(issue_type = ifelse((value > 40), "form duration too long", "form duration too short"))
+names(check_time)[names(check_time) == "index"] <- "uuid"
 
-time_check$g_enum_agency <- data$g_enum_agency[match(time_check$uuid, data$uuid)]
-time_check$g_sub_district <- data$g_sub_district[match(time_check$uuid, data$uuid)]
+check_time$g_enum_agency <- data$g_enum_agency[match(check_time$uuid, data$uuid)]
+check_time$g_sub_district <- data$g_sub_district[match(check_time$uuid, data$uuid)]
+
+if(nrow(check_time) >= 1){
+  
+  check_time$new_value <- " "
+  check_time$fix <- "Checked with partner"
+  check_time$checked_by <- "ON"
+  check_time$issue_type <- "The survey was completed in less than 10 minutes or more than 40 minutes"
+  check_time$variable <- "Lenght of survey"
+  
+  check_time_log <- data.frame(uuid = check_time$uuid, 
+                               agency = check_time$g_enum_agency, 
+                               area = check_time$g_sub_district, 
+                               variable = check_time$variable, 
+                               issue = check_time$issue_type, 
+                               old_value = check_time$value, 
+                               new_value = check_time$new_value, 
+                               fix = check_time$fix, 
+                               checked_by = check_time$checked_by)
+  
+} else {
+  
+  check_time_log <- data.frame(uuid = as.character(),
+                               agency = as.character(),
+                               area = as.character(),
+                               variable = as.character(),
+                               issue = as.character(),
+                               old_value = as.character(),
+                               new_value = as.character(),
+                               fix = as.character(),
+                               checked_by = as.character())
+  
+  
+  print("The lenghts of the survey are within acceptable values. No cleaning needed.") }
+
+#### Check for shortest path
+count_na <- function(x) sum(is.na(x))
+
+data$CountNa <- rowSums(apply(is.na(data), 2, as.numeric))
+
+shortest_path <- data %>% select("uuid", "g_enum_agency", "g_sub_district", "CountNa")
+shortest_path <- shortest_path %>% filter(CountNa > 75)
+
+
+
+if(nrow(shortest_path)>=1) {
+  
+  shortest_path$issue_type <- "The majority of entries are NAs"
+  shortest_path$checked_by <- "NG"
+  shortest_path$new_value <- " "
+  shortest_path$fix <- "Checked with partner"
+  shortest_path$variable <- "Count of all variables"
+  
+  
+  shortest_path_log <- data.frame(uuid = shortest_path$uuid, 
+                         agency = shortest_path$g_enum_agency, 
+                         area = shortest_path$g_sub_district, 
+                         variable = shortest_path$variable,
+                         issue = shortest_path$issue_type, 
+                         old_value = shortest_path$CountNa, 
+                         new_value = shortest_path$new_value, 
+                         fix = shortest_path$fix, 
+                         checked_by = shortest_path$checked_by)
+  
+  
+} else {
+  
+  shortest_path_log <- data.frame(uuid = as.character(),
+                         agency = as.character(),
+                         area = as.character(),
+                         variable = as.character(),
+                         issue = as.character(),
+                         old_value = as.character(),
+                         new_value = as.character(),
+                         fix = as.character(),
+                         checked_by = as.character()) 
+  
+  print("No enumerators seems to have taken the shortest path")}
 
 
 ### Final: building cleaning log
 cleaning_log <- plyr::rbind.fill(issue_log,
                                  access_log,
-                                 soap_log)
+                                 soap_log,
+                                 shortest_path_log)
 
 
 final_log <- list("cleaning_log" = cleaning_log,
-                  "Timestamp checks"= time_check)
+                  "Timestamp checks"= check_time_log)
 
 write.xlsx(final_log, paste0("./output/WASH_WANTS Cholera_cleaning log_",current_date,".xlsx"))
 browseURL(paste0("./output/WASH_WANTS Cholera_cleaning log_",current_date,".xlsx"))

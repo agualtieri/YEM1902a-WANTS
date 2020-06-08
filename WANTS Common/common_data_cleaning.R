@@ -1,7 +1,7 @@
 ### WASH WANTS Assessment Data Cleaning Script - Common Tool
 ### REACH Yemen
-### V4
-### 16/12/2019
+### V5
+### 02/06/2020
 
 rm(list=ls())
 
@@ -19,12 +19,12 @@ library("dataqualitycontrol")
 library("tidyverse")
 library("openxlsx")
 library("stringr")
-library("googleLanguageR")
+#library("googleLanguageR")
 
 ### Load source
 source("./R/moveme.R")
-source("./R/translation.R")
-source("./R/time_check.R")
+#source("./R/translation.R")
+source("./R/check_time.R")
 source("./R/add_locations.R")
 
 
@@ -33,35 +33,28 @@ current_date <- Sys.Date()
 
 
 ### Load data an rename uuid variable
-parent <- read.xlsx("./data/WANTS_Common_16122019_RAW.xlsx", sheet = "WANTS Common Key Informant Q...")
-child <- read.xlsx("./data/WANTS_Common_16122019_RAW.xlsx", sheet = "g_orgaidloop" )
+data <- read.xlsx("./data/REACH_YEM_Common KI Kobo_WANTS_Test.xlsx", sheet = "Sheet1")
 
-names(parent)[names(parent) == "_uuid"] <- "parent_uuid"
-names(parent)[names(parent) == "_index"] <- "index"
 
-names(child)[names(child) == "_submission_uuid"] <- "child_uuid"
-names(child)[names(child) == "_index"] <- "child_index"
-names(child)[names(child) == "_parent_index"] <- "parent_index"
-names(child)[names(child) == "_submission__uuid"] <- "parent_uuid"
+names(data)[names(data) == "_uuid"] <- "data_uuid"
+names(data)[names(data) == "_index"] <- "index"
 
-### Add Pcodes
-parent <- add.location(parent)
 
+### Add Location names
+#data <- add.location(data)
 
 
 ### Base check: remove sensitive information from dataset before starting the analysis - package used: dataqualitycontrol
-parent <- anonymise_dataset(parent, c("deviceid", "_submission_time", "_tags", "x_Note", "__version__", "_validation_status", "_id", "g_enum_last_name", "g_enum_name"))
-child <- anonymise_dataset(child, c("_submission__submission_time", "_submission__validation_status", "_submission__id", "_parent_table_name"))
+data <- anonymise_dataset(data, c("deviceid", "_submission_time", "_tags", "x_Note", "__version__", "_validation_status", "_id", "g_enum_last_name", "g_enum_name"))
 
 
 #### Stuff to translate
-# trans_parent <- translate.others.arabic(parent, c("g_location_other", "g_position_KI", "w_treatmethod_other", "h_hygieneitem_other", "s_disposetrash_other"))
+# trans_data <- translate.others.arabic(data, c("g_location_other", "g_position_KI", "w_treatmethod_other", "h_hygieneitem_other", "s_disposetrash_other"))
 # trans_child <- translate.others.arabic(child, "g_Name_of_Organization")
 
 
-
 ### First check: numeric variables and other - package used: cleaninginspectoR
-issues <- inspect_all(parent, "parent_uuid")
+issues <- inspect_all(data, "data_uuid")
 
 issue_table <- issues
 
@@ -77,7 +70,7 @@ if(nrow(issue_table)>=1) {
   issue_table$fix <- "Checked with partner"
   issue_table$checked_by <- "NG"
   
-  issue_log <- data.frame(uuid = issue_table$parent_uuid, 
+  issue_log <- data.frame(uuid = issue_table$data_uuid, 
                           agency = issue_table$ngo, 
                           area = issue_table$area, 
                           variable = issue_table$variable,
@@ -107,8 +100,8 @@ if(nrow(issue_table)>=1) {
 
 ### Second check: soft constraints
 #### 1. The KI reported issues accessing to water but no accessing issues were highlighted
-water_checks <- parent %>% select(c("parent_uuid", "g_enum_agency", "g_sub_district", "w_waterneeds", "w_wateraccess")) %>% 
-                mutate(water_check = ifelse(((parent$w_wateraccess == "no") & (parent$w_waterneeds == "none" | parent$w_waterneeds == "few")),1,0)) %>%
+water_checks <- data %>% select(c("data_uuid", "g_enum_agency", "g_sub_district", "w_waterneeds", "w_wateraccess")) %>% 
+                mutate(water_check = ifelse(((data$w_wateraccess == "no") & (data$w_waterneeds == "none" | data$w_waterneeds == "few")),1,0)) %>%
                 filter(water_check == 1)
 
 
@@ -121,7 +114,7 @@ if(nrow(water_checks)>=1) {
   water_checks$variable <- "w_waterneeds"
   
   
-  water_log <- data.frame(uuid = water_checks$parent_uuid, 
+  water_log <- data.frame(uuid = water_checks$data_uuid, 
                            agency = water_checks$g_enum_agency, 
                            area = water_checks$g_sub_district, 
                            variable = water_checks$variable,
@@ -149,10 +142,10 @@ if(nrow(water_checks)>=1) {
   }
 
 #### 2. The KI reported household not having issues with water and having functional water facility but not enough soap
-sanitation_checks <- parent %>% select(c("parent_uuid", "g_enum_agency", "g_sub_district", "w_waterneeds", "h_handwashing", "h_have_soap")) %>% 
-  mutate(sanitation_check = ifelse(((parent$w_waterneeds == "none" | parent$w_waterneeds == "few" | parent$w_waterneeds == "half") & 
-                                 (parent$h_handwashing == "most" | parent$h_handwashing == "everyone") &
-                                 (parent$h_have_soap == "none" | parent$h_have_soap == "few")),1,0)) %>%
+sanitation_checks <- data %>% select(c("data_uuid", "g_enum_agency", "g_sub_district", "w_waterneeds", "h_handwashing", "h_have_soap")) %>% 
+  mutate(sanitation_check = ifelse(((data$w_waterneeds == "none" | data$w_waterneeds == "few" | data$w_waterneeds == "half") & 
+                                 (data$h_handwashing == "most" | data$h_handwashing == "everyone") &
+                                 (data$h_have_soap == "none" | data$h_have_soap == "few")),1,0)) %>%
                                   filter(sanitation_check == 1)
 
 
@@ -165,7 +158,7 @@ if(nrow(sanitation_checks)>=1) {
   sanitation_checks$variable <- "w_waterneeds"
   
   
-  sanitation_log <- data.frame(uuid = sanitation_checks$parent_uuid, 
+  sanitation_log <- data.frame(uuid = sanitation_checks$data_uuid, 
                            agency = sanitation_checks$g_enum_agency, 
                            area = sanitation_checks$g_sub_district, 
                            variable = sanitation_checks$variable,
@@ -192,8 +185,8 @@ if(nrow(sanitation_checks)>=1) {
 
 
 #### 3. Check if people who reported having issues accessing soap they also report particular constraints
-soap_checks <- parent %>% select(c("parent_uuid", "g_enum_agency", "g_sub_district", "h_have_soap", "h_soapaccess")) %>% 
-  mutate(soap_check = ifelse(((parent$h_soapaccess == "no") & (parent$h_have_soap == "none" | parent$h_have_soap == "few")),1,0)) %>%
+soap_checks <- data %>% select(c("data_uuid", "g_enum_agency", "g_sub_district", "h_have_soap", "h_soapaccess")) %>% 
+  mutate(soap_check = ifelse(((data$h_soapaccess == "no") & (data$h_have_soap == "none" | data$h_have_soap == "few")),1,0)) %>%
                                 filter(soap_check == 1)
 
 
@@ -206,7 +199,7 @@ if(nrow(soap_checks)>=1) {
   soap_checks$variable <- "h_soapaccess"
   
   
-  soap_log <- data.frame(uuid = soap_checks$parent_uuid, 
+  soap_log <- data.frame(uuid = soap_checks$data_uuid, 
                                agency = soap_checks$g_enum_agency, 
                                area = soap_checks$g_sub_district, 
                                variable = soap_checks$variable,
@@ -232,8 +225,8 @@ if(nrow(soap_checks)>=1) {
   print("No issues realted to access to soap. The dataset seems clean.")}
 
 #### 4. Check if people reported didn't have any issues accessing soap but soap was not available in the community in the past 30 days
-soap2_checks <- parent %>% select(c("parent_uuid", "g_enum_agency", "g_sub_district", "h_soapaccess", "h_barsoap")) %>% 
-                mutate(soap2_check = ifelse(((parent$h_soap_problem == "no") & (parent$h_barsoap == "not_accessible")),1,0)) %>%
+soap2_checks <- data %>% select(c("data_uuid", "g_enum_agency", "g_sub_district", "h_soapaccess", "h_barsoap")) %>% 
+                mutate(soap2_check = ifelse(((data$h_soap_problem == "no") & (data$h_barsoap == "not_accessible")),1,0)) %>%
                 filter(soap2_check == 1)
 
 if(nrow(soap2_checks)>=1) {
@@ -245,7 +238,7 @@ if(nrow(soap2_checks)>=1) {
   soap2_checks$variable <- "h_barsoap"
   
   
-  soap2_log <- data.frame(uuid = soap2_checks$parent_uuid, 
+  soap2_log <- data.frame(uuid = soap2_checks$data_uuid, 
                          agency = soap2_checks$g_enum_agency, 
                          area = soap2_checks$g_sub_district, 
                          variable = soap2_checks$variable,
@@ -272,8 +265,8 @@ if(nrow(soap2_checks)>=1) {
 
 
 #### 5. Check if people reported having enough soap in the community but soap wasn't available during the past 30-days
-soap3_checks <- parent %>% select(c("parent_uuid", "g_enum_agency", "g_sub_district", "h_have_soap", "h_barsoap")) %>% 
-                mutate(soap3_check = ifelse(((parent$h_soapaccess == "half" | parent$h_soapaccess == "everyone") & (parent$h_barsoap == "not_accessible")),1,0)) %>%
+soap3_checks <- data %>% select(c("data_uuid", "g_enum_agency", "g_sub_district", "h_have_soap", "h_barsoap")) %>% 
+                mutate(soap3_check = ifelse(((data$h_soapaccess == "half" | data$h_soapaccess == "everyone") & (data$h_barsoap == "not_accessible")),1,0)) %>%
                 filter(soap3_check == 1)
 
 if(nrow(soap3_checks)>=1) {
@@ -285,7 +278,7 @@ if(nrow(soap3_checks)>=1) {
   soap3_checks$variable <- "h_have_soap"
   
   
-  soap3_log <- data.frame(uuid = soap3_checks$parent_uuid, 
+  soap3_log <- data.frame(uuid = soap3_checks$data_uuid, 
                           agency = soap3_checks$g_enum_agency, 
                           area = soap3_checks$g_sub_district, 
                           variable = soap3_checks$variable,
@@ -312,9 +305,9 @@ if(nrow(soap3_checks)>=1) {
   }
 
 #### 6. Check if people reported waste and trash frequently visible but gargabe is supposed to be collected frequently
-garbage_checks <- parent %>% select(c("parent_uuid", "g_enum_agency", "g_sub_district", "s_visibletrash", "s_trashcollected")) %>% 
-                mutate(garbage_check = ifelse(((parent$s_visibletrash == "most" | parent$s_visibletrash == "everyone") & 
-                                           (parent$s_trashcollected == "every_Day" | parent$s_trashcollected == "once_week")),1,0)) %>%
+garbage_checks <- data %>% select(c("data_uuid", "g_enum_agency", "g_sub_district", "s_visibletrash", "s_trashcollected")) %>% 
+                mutate(garbage_check = ifelse(((data$s_visibletrash == "most" | data$s_visibletrash == "everyone") & 
+                                           (data$s_trashcollected == "every_Day" | data$s_trashcollected == "once_week")),1,0)) %>%
                 filter(garbage_check == 1)
 
 
@@ -327,7 +320,7 @@ if(nrow(garbage_checks)>=1) {
   garbage_checks$variable <- "s_visibletrash"
   
   
-  garbage_log <- data.frame(uuid = garbage_checks$parent_uuid, 
+  garbage_log <- data.frame(uuid = garbage_checks$data_uuid, 
                           agency = garbage_checks$g_enum_agency, 
                           area = garbage_check$g_sub_district, 
                           variable = garbage_checks$variable,
@@ -354,15 +347,91 @@ if(nrow(garbage_checks)>=1) {
 }
 
 ### Check times
-time_stamp <- parent %>% select("parent_uuid", "start", "end")
+time_stamp <- select(data, "data_uuid", "start", "end", "g_enum_agency", "g_sub_district")
+check_time <- check_time(time_stamp, 5, 40)
 
-time_check <- cleaninginspectoR::check_time(time_stamp, 5, 40)
-names(time_check)[names(time_check) == "index"] <- "uuid"
 
-time_check <- time_check %>% mutate(issue_type = ifelse((value > 40), "form duration too long", "form duration too short"))
+names(check_time)[names(check_time) == "index"] <- "uuid"
 
-time_check$g_enum_agency <- parent$g_enum_agency[match(time_check$uuid, parent$parent_uuid)]
-time_check$g_sub_district <- parent$g_sub_district[match(time_check$uuid, parent$parent_uuid)]
+check_time$g_enum_agency <- data$g_enum_agency[match(check_time$uuid, data$uuid)]
+check_time$g_sub_district <- data$g_sub_district[match(check_time$uuid, data$uuid)]
+
+if(nrow(check_time) >= 1){
+  
+  check_time$new_value <- " "
+  check_time$fix <- "Checked with partner"
+  check_time$checked_by <- "ON"
+  check_time$issue_type <- "The survey was completed in less than 10 minutes or more than 40 minutes"
+  check_time$variable <- "Lenght of survey"
+  
+  check_time_log <- data.frame(uuid = check_time$uuid, 
+                               agency = check_time$g_enum_agency, 
+                               area = check_time$g_sub_district, 
+                               variable = check_time$variable, 
+                               issue = check_time$issue_type, 
+                               old_value = check_time$value, 
+                               new_value = check_time$new_value, 
+                               fix = check_time$fix, 
+                               checked_by = check_time$checked_by)
+  
+} else {
+  
+  check_time_log <- data.frame(uuid = as.character(),
+                               agency = as.character(),
+                               area = as.character(),
+                               variable = as.character(),
+                               issue = as.character(),
+                               old_value = as.character(),
+                               new_value = as.character(),
+                               fix = as.character(),
+                               checked_by = as.character())
+  
+  
+  print("The lenghts of the survey are within acceptable values. No cleaning needed.") }
+
+
+#### Check for shortest path
+count_na <- function(x) sum(is.na(x))
+
+data$CountNa <- rowSums(apply(is.na(data), 2, as.numeric))
+
+shortest_path <- data %>% select("data_uuid", "g_enum_agency", "g_sub_district", "CountNa")
+shortest_path <- shortest_path %>% filter(CountNa > 110)
+
+
+if(nrow(shortest_path)>=1) {
+  
+  shortest_path$issue_type <- "The majority of entries are NAs"
+  shortest_path$checked_by <- "NG"
+  shortest_path$new_value <- " "
+  shortest_path$fix <- "Checked with partner"
+  shortest_path$variable <- "Count of all variables"
+  
+  
+  shortest_path_log <- data.frame(uuid = shortest_path$data_uuid, 
+                                  agency = shortest_path$g_enum_agency, 
+                                  area = shortest_path$g_sub_district, 
+                                  variable = shortest_path$variable,
+                                  issue = shortest_path$issue_type, 
+                                  old_value = shortest_path$CountNa, 
+                                  new_value = shortest_path$new_value, 
+                                  fix = shortest_path$fix, 
+                                  checked_by = shortest_path$checked_by)
+  
+  
+} else {
+  
+  shortest_path_log <- data.frame(uuid = as.character(),
+                         agency = as.character(),
+                         area = as.character(),
+                         variable = as.character(),
+                         issue = as.character(),
+                         old_value = as.character(),
+                         new_value = as.character(),
+                         fix = as.character(),
+                         checked_by = as.character()) 
+  
+  print("No enumerators seems to have taken the shortest path")}
 
 
 
@@ -375,12 +444,13 @@ cleaning_log <- plyr::rbind.fill(issue_log,
                                  soap_log,
                                  soap2_log,
                                  soap3_log,
-                                 garbage_log
+                                 garbage_log,
+                                 shortest_path_log
                                  )
 
 
 final_log <- list("cleaning_log" = cleaning_log,
-                  "Timestamp checks"= time_check)
+                  "Timestamp checks"= check_time_log)
 
 write.xlsx(final_log, paste0("./output/WASH_WANTS Common_cleaning log_",current_date,".xlsx"))
 browseURL(paste0("./output/WASH_WANTS Common_cleaning log_",current_date,".xlsx"))
